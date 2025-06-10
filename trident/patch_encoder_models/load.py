@@ -2,6 +2,7 @@ import traceback
 from abc import abstractmethod
 from typing import Literal, Optional
 import torch
+import torch.nn as nn
 import os 
 
 from trident.patch_encoder_models.utils.constants import get_constants
@@ -101,6 +102,10 @@ def encoder_factory(model_name: str, **kwargs):
         enc = LunitS8InferenceEncoder
     elif model_name == 'midnight12k':
         enc = Midnight12kInferenceEncoder
+    elif model_name == 'univ2_distill':
+        enc = UNIv2DistillInferenceEncoder
+    elif model_name == 'univ2_distill_head':
+        enc = UNIv2DistillHeadInferenceEncoder
     else:
         raise ValueError(f"Unknown encoder name {model_name}")
 
@@ -200,6 +205,158 @@ class CustomInferenceEncoder(BasePatchEncoder):
         
     def _build(self):
         return None, None, None
+
+class StudentEMA(nn.Module):
+    """Student Vision Transformer."""
+    def __init__(self, model_name='dinov2_vitb14', embed_dim=768, pretrained=True):
+        super().__init__()
+
+        self.model = torch.hub.load('facebookresearch/dinov2', model_name)
+        
+    def forward(self, x):
+        # Input shape: (B, 3, 224, 224)
+        outputs = self.model.forward_features(x)
+        
+        # Separate CLS token and patch tokens
+        cls_token = outputs['x_norm_clstoken']
+        patch_tokens = outputs['x_norm_patchtokens']
+        
+        return cls_token
+
+class UNIv2DistillInferenceEncoder(BasePatchEncoder):
+
+    def __init__(self, **build_kwargs):
+        """
+        Initialize a CustomInferenceEncoder from user-defined components.
+
+        This class is used when the model, transforms, and precision are pre-instantiated externally 
+        and should be injected directly into the encoder wrapper.
+
+        Args:
+            enc_name (str): 
+                A unique name or identifier for the encoder (used for registry or logging).
+            model (torch.nn.Module): 
+                A PyTorch model instance to use for inference.
+            transforms (Callable): 
+                A callable (e.g., torchvision or timm transform) to preprocess input images for evaluation.
+            precision (torch.dtype): 
+                The precision to use for inference (e.g., torch.float32, torch.float16).
+        """
+        super().__init__(**build_kwargs)
+        
+    def _build(self):
+        from torchvision import transforms
+
+        weights_path = self._get_weights_path()
+        epoch = weights_path.split('.')[0].split('_')[-1]
+
+        self.enc_name = f'univ2_distill_{epoch}'
+
+        if weights_path:
+            print(f"Loading UNIv2 Distill model from {weights_path}")
+            try:
+                model = StudentEMA(
+                    model_name='dinov2_vitb14',
+                    embed_dim=768,
+                    pretrained=False
+                )
+                loaded_package = torch.load(weights_path, map_location='cpu')
+                model.load_state_dict(loaded_package['state_dict'], strict=True)
+                print("✓ Model loaded successfully.")
+            except Exception as e:
+                traceback.print_exc()
+                raise Exception(
+                    f"Failed to create UNIv2 Distill model from local checkpoint at '{weights_path}'. "
+                )
+        
+        eval_transform = transforms.Compose([
+            transforms.Resize(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
+
+        precision = torch.float32
+        return model, eval_transform, precision
+
+class StudentEMAproj(nn.Module):
+    """Student Vision Transformer with head."""
+    def __init__(self, model_name='dinov2_vitb14', embed_dim=768, hidden_dim=1536, out_dim=1536, pretrained=True):
+        super().__init__()
+
+        self.model = torch.hub.load('facebookresearch/dinov2', model_name)
+
+        self.projector = nn.Sequential(nn.Linear(embed_dim, hidden_dim),  # Direct expansion
+            nn.BatchNorm1d(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, out_dim))
+        
+    def forward(self, x):
+        # Input shape: (B, 3, 224, 224)
+
+        outputs = self.model.forward_features(x)
+        
+        # Separate CLS token and patch tokens
+        cls_token = outputs['x_norm_clstoken']
+        patch_tokens = outputs['x_norm_patchtokens']
+
+        feats = self.projector(cls_token)
+        
+        return feats
+
+class UNIv2DistillHeadInferenceEncoder(BasePatchEncoder):
+    def __init__(self, **build_kwargs):
+        """
+        Initialize a CustomInferenceEncoder from user-defined components.
+
+        This class is used when the model, transforms, and precision are pre-instantiated externally 
+        and should be injected directly into the encoder wrapper.
+
+        Args:
+            enc_name (str): 
+                A unique name or identifier for the encoder (used for registry or logging).
+            model (torch.nn.Module): 
+                A PyTorch model instance to use for inference.
+            transforms (Callable): 
+                A callable (e.g., torchvision or timm transform) to preprocess input images for evaluation.
+            precision (torch.dtype): 
+                The precision to use for inference (e.g., torch.float32, torch.float16).
+        """
+        super().__init__(**build_kwargs)
+        
+    def _build(self):
+        from torchvision import transforms
+        
+        weights_path = self._get_weights_path()
+        epoch = weights_path.split('.')[0].split('_')[-1]
+
+        self.enc_name = f'univ2_distill_head_{epoch}'
+
+        if weights_path:
+            print(f"Loading UNIv2 Distill model from {weights_path}")
+            try:
+                model = StudentEMAproj(model_name='dinov2_vitb14',
+                    embed_dim=768,
+                    hidden_dim=1536,
+                    out_dim=1536,
+                    pretrained=False
+                )
+                loaded_package = torch.load(weights_path, map_location='cpu')
+                model.load_state_dict(loaded_package['state_dict'], strict=True)
+                print("✓ Model loaded successfully.")
+            except Exception as e:
+                traceback.print_exc()
+                raise Exception(
+                    f"Failed to create UNIv2 Distill model from local checkpoint at '{weights_path}'. "
+                )
+        
+        eval_transform = transforms.Compose([
+            transforms.Resize(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
+
+        precision = torch.float32
+        return model, eval_transform, precision
 
 
 class MuskInferenceEncoder(BasePatchEncoder):

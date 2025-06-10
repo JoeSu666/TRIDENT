@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/fs/scratch/PAS3015/Users/ziyu/distillfm/TRIDENT/run_batch_of_slides.py", line 278, in <module>
+    main()
+  File "/fs/scratch/PAS3015/Users/ziyu/distillfm/TRIDENT/run_batch_of_slides.py", line 274, in main
+    run_task(processor, args)
+  File "/fs/scratch/PAS3015/Users/ziyu/distillfm/TRIDENT/run_batch_of_slides.py", line 190, in run_task
+    from trident.patch_encoder_models.load import encoder_factory
+  File "/fs/scratch/PAS3015/Users/ziyu/distillfm/TRIDENT/trident/patch_encoder_models/__init__.py", line 1, in <module>
+    from trident.patch_encoder_models.load import (
+  File "/fs/scratch/PAS3015/Users/ziyu/distillfm/TRIDENT/trident/patch_encoder_models/load.py", line 208, in <module>
+    class StudentEMA(nn.Module):
+NameError: name 'nn' is not defined

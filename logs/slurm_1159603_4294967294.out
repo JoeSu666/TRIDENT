@@ -1,0 +1,3 @@
+[PROCESSOR] Found 3 valid slides in ../MIL/data/sampleslides/.
+Loading UNIv2 Distill model from /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_base_pretrain_48x24bsize/checkpoints/student_ema_ep9.ckpt
+✓ Model loaded successfully.
