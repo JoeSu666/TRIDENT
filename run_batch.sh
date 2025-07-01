@@ -31,3 +31,10 @@ source activate trident
 #                             --patch_encoder univ2_distill_head \
 #                             --patch_encoder_ckpt_path /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_base_pretrain_48x24bsize/checkpoints/student_ema_head_ep9.ckpt \
 #                             --mag 20 --patch_size 896
+
+# run FEATURE EXTRACTION with BACKBONE (CLS+avg(Tokens)). OUTPUTS 768x2-dim
+
+# python run_batch_of_slides.py --task feat --wsi_dir ../MIL/data/sampleslides/ --job_dir ./trident_processed \
+#                             --patch_encoder univ2_distill_concat \
+#                             --patch_encoder_ckpt_path /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_base_pretrain_48x24bsize/checkpoints/student_ema_ep9.ckpt \
+#                             --mag 20 --patch_size 896
