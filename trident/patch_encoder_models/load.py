@@ -106,6 +106,8 @@ def encoder_factory(model_name: str, **kwargs):
         enc = UNIv2DistillInferenceEncoder
     elif model_name == 'univ2_distill_head':
         enc = UNIv2DistillHeadInferenceEncoder
+    elif model_name == 'univ2_distill_concat':
+        enc = UNIv2DistillConcatInferenceEncoder
     else:
         raise ValueError(f"Unknown encoder name {model_name}")
 
@@ -256,6 +258,78 @@ class UNIv2DistillInferenceEncoder(BasePatchEncoder):
             print(f"Loading UNIv2 Distill model from {weights_path}")
             try:
                 model = StudentEMA(
+                    model_name='dinov2_vitb14',
+                    embed_dim=768,
+                    pretrained=False
+                )
+                loaded_package = torch.load(weights_path, map_location='cpu')
+                model.load_state_dict(loaded_package['state_dict'], strict=True)
+                print("✓ Model loaded successfully.")
+            except Exception as e:
+                traceback.print_exc()
+                raise Exception(
+                    f"Failed to create UNIv2 Distill model from local checkpoint at '{weights_path}'. "
+                )
+        
+        eval_transform = transforms.Compose([
+            transforms.Resize(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
+
+        precision = torch.float32
+        return model, eval_transform, precision
+
+class StudentEMAconcat(nn.Module):
+    """Student Vision Transformer."""
+    def __init__(self, model_name='dinov2_vitb14', embed_dim=768, pretrained=True):
+        super().__init__()
+
+        self.model = torch.hub.load('facebookresearch/dinov2', model_name)
+        
+    def forward(self, x):
+        # Input shape: (B, 3, 224, 224)
+        outputs = self.model.forward_features(x)
+        
+        # Separate CLS token and patch tokens
+        cls_token = outputs['x_norm_clstoken']
+        patch_tokens = outputs['x_norm_patchtokens']
+
+        return torch.concat((cls_token, patch_tokens.mean(dim=1)), dim=1)  # Concatenate CLS token with averaged patch tokens
+
+class UNIv2DistillConcatInferenceEncoder(BasePatchEncoder):
+
+    def __init__(self, **build_kwargs):
+        """
+        Initialize a CustomInferenceEncoder from user-defined components.
+
+        This class is used when the model, transforms, and precision are pre-instantiated externally 
+        and should be injected directly into the encoder wrapper.
+
+        Args:
+            enc_name (str): 
+                A unique name or identifier for the encoder (used for registry or logging).
+            model (torch.nn.Module): 
+                A PyTorch model instance to use for inference.
+            transforms (Callable): 
+                A callable (e.g., torchvision or timm transform) to preprocess input images for evaluation.
+            precision (torch.dtype): 
+                The precision to use for inference (e.g., torch.float32, torch.float16).
+        """
+        super().__init__(**build_kwargs)
+        
+    def _build(self):
+        from torchvision import transforms
+
+        weights_path = self._get_weights_path()
+        epoch = weights_path.split('.')[0].split('_')[-1]
+
+        self.enc_name = f'univ2_distill_{epoch}'
+
+        if weights_path:
+            print(f"Loading UNIv2 Distill model from {weights_path}")
+            try:
+                model = StudentEMAconcat(
                     model_name='dinov2_vitb14',
                     embed_dim=768,
                     pretrained=False
