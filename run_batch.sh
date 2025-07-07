@@ -15,7 +15,8 @@
 source activate trident
 
 # run the python file
-# python run_batch_of_slides.py --task seg --wsi_dir ../MIL/data/sampleslides/ --job_dir ./trident_processed --gpu 0 --segmenter hest
+python run_batch_of_slides.py --task seg --wsi_dir /fs/scratch/PAS2942/Datasets/TCGA2/COAD --job_dir ./trident_tcgacoad --gpu 0 --segmenter hest \
+                            --custom_list_of_wsis  /fs/scratch/PAS3015/Users/ziyu/distillfm/tcgacoadfilelist.csv
 # python run_batch_of_slides.py --task coords --wsi_dir ../MIL/data/sampleslides/ --job_dir ./trident_processed --mag 20 --patch_size 896 --overlap 0
 
 # run FEATURE EXTRACTION with BACKBONE. OUTPUTS 768-dim
@@ -38,3 +39,10 @@ source activate trident
 #                             --patch_encoder univ2_distill_concat \
 #                             --patch_encoder_ckpt_path /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_base_pretrain_48x24bsize/checkpoints/student_ema_ep9.ckpt \
 #                             --mag 20 --patch_size 896
+
+# run FEATURE EXTRACTION with BACKBONE (ViT-Small). OUTPUTS 384-dim
+
+# python run_batch_of_slides.py --task feat --wsi_dir ../MIL/data/sampleslides/ --job_dir ./trident_processed \
+#                             --patch_encoder univ2_distill_small \
+#                             --patch_encoder_ckpt_path /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_small_pretrain_48x24bsize/checkpoints/student_ema_ep9.ckpt \
+#                             --mag 20 --patch_size 896 
