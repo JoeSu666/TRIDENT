@@ -237,7 +237,7 @@ class UNIv2DistillSmallInferenceEncoder(BasePatchEncoder):
         weights_path = self._get_weights_path()
         epoch = weights_path.split('.')[0].split('_')[-1]
 
-        self.enc_name = f'univ2_distill_{epoch}'
+        self.enc_name = f'univ2_distill_small_{epoch}'
 
         if weights_path:
             print(f"Loading UNIv2 Distill model from {weights_path}")
@@ -381,7 +381,7 @@ class UNIv2DistillConcatInferenceEncoder(BasePatchEncoder):
         weights_path = self._get_weights_path()
         epoch = weights_path.split('.')[0].split('_')[-1]
 
-        self.enc_name = f'univ2_distill_{epoch}'
+        self.enc_name = f'univ2_distill_concat_{epoch}'
 
         if weights_path:
             print(f"Loading UNIv2 Distill model from {weights_path}")
