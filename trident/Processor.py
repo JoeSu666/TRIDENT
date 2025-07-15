@@ -523,6 +523,112 @@ class Processor:
         # Return the directory where the features are saved
         return os.path.join(self.job_dir, saveto)
 
+    def run_patch_job(
+        self, 
+        coords_dir: str, 
+        patch_encoder: torch.nn.Module, 
+        device: str, 
+        saveas: str = 'pt', 
+        batch_limit: int = 512, 
+        saveto: str | None = None
+    ) -> str:
+        """
+        The `run_patch_job` function extract the raw patches from the WSI.
+
+        Parameters:
+            coords_dir (str): 
+                Path to the directory containing patch coordinates, which are used to locate patches for feature extraction.
+            patch_encoder (torch.nn.Module): 
+                A pre-trained PyTorch model used to compute features from the extracted patches.
+            device (str): 
+                The computation device to use (e.g., 'cuda:0' for GPU or 'cpu' for CPU).
+            saveas (str, optional): 
+                The format in which extracted features are saved. Can be 'h5' or 'pt'. Defaults to 'h5'.
+            batch_limit (int, optional): 
+                The maximum number of patches processed in a single batch. Defaults to 512.
+            saveto (str, optional): 
+                Directory where the extracted features will be saved. If not provided, a directory name will 
+                be generated automatically. Defaults to None.
+
+        Returns:
+            str: The absolute path to where the features are saved.
+
+        Example
+        -------
+        Extract features from patches using a pre-trained encoder:
+
+        >>> from models import PatchEncoder
+        >>> encoder = PatchEncoder()
+        >>> processor.run_feature_extraction_job(
+        ...     coords_dir="output/patch_coords/",
+        ...     patch_encoder=encoder,
+        ...     device="cuda:0"
+        ... )
+        """
+        if saveto is None:
+            saveto = os.path.join(coords_dir, f'patches_{patch_encoder.enc_name}')
+
+        os.makedirs(os.path.join(self.job_dir, saveto), exist_ok=True)
+
+        sig = signature(self.run_patch_feature_extraction_job)
+        local_attrs = {k: v for k, v in locals().items() if k in sig.parameters}
+        self.save_config(
+            saveto=os.path.join(self.job_dir, coords_dir, f'_config_feats_{patch_encoder.enc_name}.json'),
+            local_attrs=local_attrs,
+            ignore = ['patch_encoder', 'loop', 'valid_slides', 'wsis']
+        )
+
+        log_fp = os.path.join(self.job_dir, coords_dir, f'_logs_feats_{patch_encoder.enc_name}.txt')
+        self.loop = tqdm(self.wsis, desc=f'Extracting patch features from coords in {coords_dir}', total = len(self.wsis))
+        for wsi in self.loop:    
+            wsi_feats_fp = os.path.join(self.job_dir, saveto, f'{wsi.name}.{saveas}')
+            # Check if features already exist
+            if os.path.exists(wsi_feats_fp) and not is_locked(wsi_feats_fp):
+                self.loop.set_postfix_str(f'Features already extracted for {wsi}. Skipping...')
+                update_log(log_fp, f'{wsi.name}{wsi.ext}', 'Features extracted.')
+                continue
+
+            # Check if coords exist
+            coords_path = os.path.join(self.job_dir, coords_dir, 'patches', f'{wsi.name}_patches.h5')
+            if not os.path.exists(coords_path):
+                self.loop.set_postfix_str(f'Coords not found for {wsi.name}. Skipping...')
+                update_log(log_fp, f'{wsi.name}{wsi.ext}', 'Coords not found.')
+                continue
+
+            # Check if another process has claimed this slide
+            if is_locked(wsi_feats_fp):
+                self.loop.set_postfix_str(f'{wsi.name} is locked. Skipping...')
+                continue
+
+            try:
+                self.loop.set_postfix_str(f'Extracting features from {wsi.name}{wsi.ext}')
+                create_lock(wsi_feats_fp)
+                update_log(log_fp, f'{wsi.name}{wsi.ext}', 'LOCKED. Extracting features...')
+
+                # under construction
+                wsi.extract_save_patch(
+                    patch_encoder = patch_encoder,
+                    coords_path = coords_path,
+                    save_patch=os.path.join(self.job_dir, saveto),
+                    device=device,
+                    saveas='pt',
+                    batch_limit=batch_limit
+                )
+
+                remove_lock(wsi_feats_fp)
+                update_log(log_fp, f'{wsi.name}{wsi.ext}', 'Features extracted.')
+            except Exception as e:
+                if isinstance(e, KeyboardInterrupt):
+                    remove_lock(wsi_feats_fp)
+                if self.skip_errors:
+                    update_log(log_fp, f'{wsi.name}{wsi.ext}', f'ERROR: {e}')
+                    continue
+                else:
+                    raise e
+        
+        # Return the directory where the features are saved
+        return os.path.join(self.job_dir, saveto)
+
     def run_slide_feature_extraction_job(
         self,
         slide_encoder: torch.nn.Module,

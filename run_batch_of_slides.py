@@ -22,7 +22,7 @@ def build_parser():
     # Generic arguments 
     parser.add_argument('--gpu', type=int, default=0, help='GPU index to use for processing tasks.')
     parser.add_argument('--task', type=str, default='seg', 
-                        choices=['seg', 'coords', 'feat', 'all'], 
+                        choices=['seg', 'coords', 'feat', 'patch', 'all'], 
                         help='Task to run: seg (segmentation), coords (save tissue coordinates), img (save tissue images), feat (extract features).')
     parser.add_argument('--job_dir', type=str, required=True, help='Directory to store outputs.')
     parser.add_argument('--skip_errors', action='store_true', default=False, 
@@ -207,6 +207,16 @@ def run_task(processor, args):
                 saveas='h5',
                 batch_limit=args.feat_batch_size if args.feat_batch_size is not None else args.batch_size,
             )
+    elif args.task == 'patch':
+        from trident.patch_encoder_models.load import encoder_factory
+        encoder = encoder_factory(args.patch_encoder, weights_path=args.patch_encoder_ckpt_path)
+        processor.run_patch_job(
+            coords_dir=args.coords_dir or f'{args.mag}x_{args.patch_size}px_{args.overlap}px_overlap',
+            patch_encoder=encoder,
+            device=f'cuda:{args.gpu}',
+            saveas='pt',
+            batch_limit=args.feat_batch_size if args.feat_batch_size is not None else args.batch_size,
+        )
     else:
         raise ValueError(f'Invalid task: {args.task}')
 

@@ -676,6 +676,98 @@ class WSI:
 
         return os.path.join(save_features, f'{self.name}.{saveas}')
 
+    def extract_save_patch(
+        self,
+        patch_encoder: torch.nn.Module,
+        coords_path: str,
+        save_patch: str,
+        device: str = 'cuda:0',
+        saveas: str = 'pt',
+        batch_limit: int = 512
+    ) -> str:
+        """
+        The `extract_patch_features` function of the class `WSI` extracts feature embeddings 
+        from the WSI using a specified patch encoder. It processes the patches as specified 
+        in the coordinates file and saves the features in the desired format.
+
+        Args:
+        -----
+        patch_encoder : torch.nn.Module
+            The model used for feature extraction.
+        coords_path : str
+            Path to the file containing patch coordinates.
+        save_patch : str
+            Directory path to save the patches.
+        device : str, optional
+            Device to run feature extraction on (e.g., 'cuda:0'). Defaults to 'cuda:0'.
+        saveas : str, optional
+            Format to save the features ('h5' or 'pt'). Defaults to 'h5'.
+        batch_limit : int, optional
+            Maximum batch size for feature extraction. Defaults to 512.
+
+        Returns:
+        --------
+        str:
+            The absolute file path to the saved feature file in the specified format.
+
+        Example:
+        --------
+        >>> features_path = wsi.extract_features(patch_encoder, "output_coords/sample_name_patches.h5", "output_features")
+        >>> print(features_path)
+        output_features/sample_name.h5
+        """
+
+        self._lazy_initialize()
+        precision = getattr(patch_encoder, 'precision', torch.float32)
+        patch_transforms = patch_encoder.eval_transforms
+
+        try:
+            coords_attrs, coords = read_coords(coords_path)
+            patch_size = coords_attrs.get('patch_size', None)
+            level0_magnification = coords_attrs.get('level0_magnification', None)
+            target_magnification = coords_attrs.get('target_magnification', None)            
+            if None in (patch_size, level0_magnification, target_magnification):
+                raise KeyError('Missing attributes in coords_attrs.')
+        except (KeyError, FileNotFoundError, ValueError) as e:
+            warnings.warn(f"Cannot read using Trident coords format ({str(e)}). Trying with CLAM/Fishing-Rod.")
+            patch_size, patch_level, custom_downsample, coords = read_coords_legacy(coords_path)
+            level0_magnification = self.mag
+            target_magnification = int(self.mag / (self.level_downsamples[patch_level] * custom_downsample))
+
+        # skip following steps if error
+        try:
+            patcher = self.create_patcher(
+                patch_size=patch_size,
+                src_mag=level0_magnification,
+                dst_mag=target_magnification,
+                custom_coords=coords,
+                coords_only=False,
+                pil=True,
+            )
+
+            dataset = WSIPatcherDataset(patcher, patch_transforms)
+            dataloader = DataLoader(dataset, batch_size=batch_limit, num_workers=get_num_workers(batch_limit, max_workers=self.max_workers), pin_memory=True)
+            # dataloader = DataLoader(dataset, batch_size=batch_limit, num_workers=0, pin_memory=True)
+
+            all_imgs = []
+            for imgs, _ in dataloader:
+                all_imgs.append(imgs)
+
+            # Concatenate patches
+            features = torch.cat(all_imgs, dim=0)
+
+            # Save the features to disk
+            os.makedirs(save_patch, exist_ok=True)
+            if saveas == 'pt':
+                torch.save(features, os.path.join(save_patch, f'{self.name}.{saveas}'))
+            else:
+                raise ValueError(f'Invalid save_patch_as: {saveas}. Only "pt" are supported.')
+
+            return os.path.join(save_patch, f'{self.name}.{saveas}')
+
+        except (KeyError, FileNotFoundError, ValueError, IndexError) as e:
+            print("Skip. No coords.")
+
     @torch.inference_mode()
     def extract_slide_features(
         self,
