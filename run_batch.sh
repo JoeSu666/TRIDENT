@@ -40,6 +40,13 @@ python run_batch_of_slides.py --task seg --wsi_dir /fs/scratch/PAS2942/Datasets/
 #                             --patch_encoder_ckpt_path /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_base_pretrain_48x24bsize/checkpoints/student_ema_ep9.ckpt \
 #                             --mag 20 --patch_size 896
 
+# run FEATURE EXTRACTION with BACKBONE and L1 loss. OUTPUTS 768-dim
+
+# python run_batch_of_slides.py --task feat --wsi_dir ../MIL/data/sampleslides/ --job_dir ./trident_processed \
+#                             --patch_encoder univ2_distill_l1 \
+#                             --patch_encoder_ckpt_path /fs/scratch/PAS3015/Users/ziyu/distillfm/distillfm/outputs/distill_uni_to_vit_base_l1_pretrain_48x24bsize/checkpoints/student_ema_l1_ep9.ckpt \
+#                             --mag 20 --patch_size 896
+
 # run FEATURE EXTRACTION with BACKBONE (ViT-Small). OUTPUTS 384-dim
 
 # python run_batch_of_slides.py --task feat --wsi_dir ../MIL/data/sampleslides/ --job_dir ./trident_processed \
